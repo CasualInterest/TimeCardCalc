@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Delta Timecard Calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <style>
+    :root {
+      --navy:      #09111f;
+      --navy-mid:  #0e1c31;
+      --navy-light:#152540;
+      --border:    #1e3354;
+      --red:       #c8102e;
+      --red-dim:   #8b0b1f;
+      --amber:     #e8a020;
+      --amber-dim: #7a5210;
+      --white:     #f0f4f8;
+      --muted:     #6b8aad;
+      --mono:      'IBM Plex Mono', monospace;
+      --sans:      'Barlow', sans-serif;
+      --cond:      'Barlow Condensed', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--navy);
+      color: var(--white);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── TOP BAR ── */
+    header {
+      width: 100%;
+      background: var(--navy-mid);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .logo-stripe {
+      width: 6px;
+      height: 32px;
+      background: var(--red);
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    header h1 {
+      font-family: var(--cond);
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--white);
+    }
+    header span.version {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--muted);
+      margin-left: auto;
+      letter-spacing: 0.1em;
+    }
+
+    /* ── MAIN LAYOUT ── */
+    main {
+      width: 100%;
+      max-width: 760px;
+      padding: 2.5rem 1.5rem 4rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.75rem;
+    }
+
+    /* ── SECTION LABELS ── */
+    .section-label {
+      font-family: var(--cond);
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.6rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .section-label .badge {
+      font-size: 0.6rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 2px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+    }
+    .badge-primary {
+      background: var(--red);
+      color: #fff;
+    }
+    .badge-beta {
+      background: var(--amber-dim);
+      color: var(--amber);
+      border: 1px solid var(--amber-dim);
+    }
+
+    /* ── CARD ── */
+    .card {
+      background: var(--navy-mid);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .card-inner { padding: 1.25rem; }
+
+    /* ── TEXTAREA ── */
+    textarea {
+      width: 100%;
+      background: var(--navy);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--white);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      line-height: 1.6;
+      padding: 0.85rem 1rem;
+      resize: vertical;
+      min-height: 130px;
+      transition: border-color 0.15s;
+      outline: none;
+    }
+    textarea:focus { border-color: var(--red); }
+    textarea::placeholder { color: var(--muted); opacity: 0.6; }
+
+    /* ── CALCULATE BUTTON ── */
+    .btn-calculate {
+      margin-top: 0.85rem;
+      width: 100%;
+      height: 46px;
+      background: var(--red);
+      color: #fff;
+      border: none;
+      border-radius: 3px;
+      font-family: var(--cond);
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-calculate:hover:not(:disabled) { background: #a50d24; }
+    .btn-calculate:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* ── SCREENSHOT SECTION ── */
+    .screenshot-card {
+      border: 1px dashed var(--border);
+      background: var(--navy-mid);
+      border-radius: 4px;
+    }
+    .drop-zone {
+      padding: 1.5rem 1.25rem;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      border-radius: 4px;
+      position: relative;
+    }
+    .drop-zone.drag-over {
+      background: #0e1c31;
+      border-color: var(--amber);
+    }
+    .drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .drop-icon {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+      opacity: 0.5;
+    }
+    .drop-text {
+      font-family: var(--cond);
+      font-size: 0.85rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    .drop-text strong { color: var(--white); }
+    .drop-hint {
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+      font-family: var(--mono);
+    }
+    .ocr-status {
+      padding: 0.6rem 1.25rem;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--amber);
+      border-top: 1px solid var(--border);
+      display: none;
+    }
+    .ocr-status.visible { display: block; }
+
+    /* ── PROGRESS BAR ── */
+    .progress-bar-wrap {
+      height: 2px;
+      background: var(--border);
+      border-radius: 1px;
+      overflow: hidden;
+      margin: 0 1.25rem 0.75rem;
+      display: none;
+    }
+    .progress-bar-wrap.visible { display: block; }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--amber);
+      width: 0%;
+      transition: width 0.2s;
+    }
+
+    /* ── RESULTS ── */
+    #results { display: none; }
+    #results.visible { display: block; }
+
+    .result-total {
+      background: var(--navy);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .result-total-label {
+      font-family: var(--cond);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .result-total-value {
+      font-family: var(--mono);
+      font-size: 2.2rem;
+      font-weight: 500;
+      color: var(--white);
+      line-height: 1;
+    }
+    .result-total-sub {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    /* ALV row */
+    .alv-row {
+      background: var(--navy);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+    .alv-label {
+      font-family: var(--cond);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .alv-value {
+      font-family: var(--mono);
+      font-size: 1rem;
+      color: var(--amber);
+    }
+
+    /* Breakdown table */
+    .breakdown-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+    }
+    .breakdown-table th {
+      font-family: var(--cond);
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      text-align: left;
+      padding: 0.4rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .breakdown-table td {
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid #111e2e;
+      color: var(--white);
+    }
+    .breakdown-table td:last-child { text-align: right; color: var(--muted); }
+    .breakdown-table tr:last-child td { border-bottom: none; }
+    .breakdown-table tr.type-row td { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.1em; }
+
+    /* Suspicious warning */
+    .warning-banner {
+      display: none;
+      background: #1a1100;
+      border: 1px solid var(--amber-dim);
+      border-radius: 3px;
+      padding: 0.75rem 1rem;
+      font-size: 0.78rem;
+      color: var(--amber);
+      font-family: var(--sans);
+      margin-bottom: 1rem;
+      line-height: 1.5;
+    }
+    .warning-banner.visible { display: block; }
+
+    /* Error state */
+    .error-banner {
+      display: none;
+      background: #150007;
+      border: 1px solid var(--red-dim);
+      border-radius: 3px;
+      padding: 0.75rem 1rem;
+      font-size: 0.78rem;
+      color: #ff6b7a;
+      font-family: var(--sans);
+      margin-bottom: 1rem;
+    }
+    .error-banner.visible { display: block; }
+
+    /* ── REPORT SECTION ── */
+    .report-trigger {
+      margin-top: 0.5rem;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 0.55rem 1rem;
+      border-radius: 3px;
+      font-family: var(--cond);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      width: 100%;
+    }
+    .report-trigger:hover { border-color: var(--red); color: var(--white); }
+
+    .report-panel {
+      display: none;
+      margin-top: 0.75rem;
+      background: var(--navy-mid);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.25rem;
+      gap: 0.75rem;
+      flex-direction: column;
+    }
+    .report-panel.visible { display: flex; }
+    .report-panel label {
+      font-family: var(--cond);
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+      display: block;
+    }
+    .report-panel textarea {
+      min-height: 80px;
+      font-size: 0.78rem;
+    }
+    .btn-report {
+      align-self: flex-end;
+      background: none;
+      border: 1px solid var(--red);
+      color: var(--red);
+      padding: 0.5rem 1.25rem;
+      border-radius: 3px;
+      font-family: var(--cond);
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-report:hover:not(:disabled) { background: var(--red); color: #fff; }
+    .btn-report:disabled { opacity: 0.4; cursor: not-allowed; }
+    .report-sent {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: #4caf82;
+      display: none;
+    }
+    .report-sent.visible { display: block; }
+
+    /* ── DIVIDER ── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      border: none;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      margin-top: auto;
+      padding: 1.5rem;
+      font-size: 0.65rem;
+      color: var(--muted);
+      font-family: var(--mono);
+      text-align: center;
+      opacity: 0.5;
+    }
+
+    /* ── SPINNER ── */
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.4rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── ANIMATIONS ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    #results.visible { animation: fadeUp 0.3s ease; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo-stripe"></div>
+  <h1>Timecard Calculator</h1>
+  <span class="version">Delta · Pay Period Tool</span>
+</header>
+
+<main>
+
+  <!-- ── TEXT INPUT (PRIMARY) ── -->
+  <section>
+    <div class="section-label">
+      Timecard Text
+      <span class="badge badge-primary">Primary</span>
+    </div>
+    <div class="card">
+      <div class="card-inner">
+        <textarea
+          id="timecard-text"
+          placeholder="Paste your full timecard text here (Ctrl+V or Cmd+V)&#10;&#10;This is the recommended method for most accurate results."
+          rows="7"
+        ></textarea>
+        <button class="btn-calculate" id="btn-calc-text">Calculate Pay Hours</button>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- ── SCREENSHOT INPUT (BETA) ── -->
+  <section>
+    <div class="section-label">
+      Screenshot Upload
+      <span class="badge badge-beta">⚠ Beta — may be less accurate</span>
+    </div>
+    <div class="screenshot-card">
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="file-input" accept="image/*" />
+        <div class="drop-icon">📋</div>
+        <div class="drop-text"><strong>Drag &amp; drop</strong> or <strong>paste</strong> a screenshot</div>
+        <div class="drop-hint">Ctrl+V / Cmd+V anywhere · or click to browse · PNG, JPG, WEBP</div>
+      </div>
+      <div class="ocr-status" id="ocr-status">Initializing OCR engine…</div>
+      <div class="progress-bar-wrap" id="progress-wrap">
+        <div class="progress-bar-fill" id="progress-bar"></div>
+      </div>
+    </div>
+    <p style="font-size:0.68rem; color:var(--muted); font-family:var(--mono); margin-top:0.5rem; line-height:1.6;">
+      ⓘ Screenshot processing runs entirely in your browser. No image data is ever transmitted or stored.
+    </p>
+  </section>
+
+  <!-- ── RESULTS ── -->
+  <section id="results">
+    <div class="section-label">Results</div>
+
+    <div class="warning-banner" id="warning-banner">
+      ⚠ The parser returned a result that may be incomplete. The raw input has been automatically sent to the developer for review. Please verify this result and use the report button below if something looks wrong.
+    </div>
+
+    <div class="error-banner" id="error-banner"></div>
+
+    <div class="result-total" id="result-total" style="display:none;">
+      <div>
+        <div class="result-total-label">Total Billable Hours</div>
+        <div class="result-total-sub" id="result-hmm">—</div>
+      </div>
+      <div class="result-total-value" id="result-decimal">—</div>
+    </div>
+
+    <div class="alv-row" id="alv-row" style="display:none;">
+      <span class="alv-label">ALV (Available Leave Value)</span>
+      <span class="alv-value" id="alv-value">—</span>
+    </div>
+
+    <div class="card" id="breakdown-card" style="display:none;">
+      <table class="breakdown-table">
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th style="text-align:right;">Time</th>
+          </tr>
+        </thead>
+        <tbody id="breakdown-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Report -->
+    <button class="report-trigger" id="btn-report-toggle" style="display:none;">
+      ⚑ Report an Error with This Result
+    </button>
+    <div class="report-panel" id="report-panel">
+      <div>
+        <label for="report-message">Describe the issue (optional)</label>
+        <textarea
+          id="report-message"
+          placeholder="e.g. The total looks too high — I had a sick day that shouldn't be counted, or the card type was wrong."
+        ></textarea>
+      </div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+        <span class="report-sent" id="report-sent">✓ Report sent. Thank you.</span>
+        <button class="btn-report" id="btn-report-send">Send Report</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>No data is stored after your session ends. Screenshots are processed locally in your browser.</footer>
+
+<script>
+  // ── STATE ──
+  let lastRawText   = '';
+  let lastResult    = null;
+  let ocrWorker     = null;
+
+  // ── ELEMENTS ──
+  const textArea        = document.getElementById('timecard-text');
+  const btnCalcText     = document.getElementById('btn-calc-text');
+  const dropZone        = document.getElementById('drop-zone');
+  const fileInput       = document.getElementById('file-input');
+  const ocrStatus       = document.getElementById('ocr-status');
+  const progressWrap    = document.getElementById('progress-wrap');
+  const progressBar     = document.getElementById('progress-bar');
+  const resultsSection  = document.getElementById('results');
+  const warningBanner   = document.getElementById('warning-banner');
+  const errorBanner     = document.getElementById('error-banner');
+  const resultTotal     = document.getElementById('result-total');
+  const resultHmm       = document.getElementById('result-hmm');
+  const resultDecimal   = document.getElementById('result-decimal');
+  const alvRow          = document.getElementById('alv-row');
+  const alvValue        = document.getElementById('alv-value');
+  const breakdownCard   = document.getElementById('breakdown-card');
+  const breakdownBody   = document.getElementById('breakdown-body');
+  const btnReportToggle = document.getElementById('btn-report-toggle');
+  const reportPanel     = document.getElementById('report-panel');
+  const reportMessage   = document.getElementById('report-message');
+  const btnReportSend   = document.getElementById('btn-report-send');
+  const reportSent      = document.getElementById('report-sent');
+
+  // ── CALCULATE FROM TEXT ──
+  btnCalcText.addEventListener('click', async () => {
+    const text = textArea.value.trim();
+    if (!text) return;
+    lastRawText = text;
+    await runCalculation(text);
+  });
+
+  // ── CALCULATE ──
+  async function runCalculation(text) {
+    setCalculating(true);
+    resetResults();
+
+    try {
+      const res  = await fetch('/.netlify/functions/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        showError(data.error || 'Something went wrong. The developer has been notified.');
+        return;
+      }
+
+      lastResult = data;
+      showResults(data);
+    } catch (e) {
+      showError('Could not reach the server. Please check your connection and try again.');
+    } finally {
+      setCalculating(false);
+    }
+  }
+
+  function setCalculating(on) {
+    btnCalcText.disabled = on;
+    btnCalcText.innerHTML = on
+      ? '<span class="spinner"></span>Calculating…'
+      : 'Calculate Pay Hours';
+  }
+
+  function resetResults() {
+    resultsSection.classList.remove('visible');
+    warningBanner.classList.remove('visible');
+    errorBanner.classList.remove('visible');
+    errorBanner.textContent = '';
+    resultTotal.style.display = 'none';
+    alvRow.style.display = 'none';
+    breakdownCard.style.display = 'none';
+    btnReportToggle.style.display = 'none';
+    reportPanel.classList.remove('visible');
+    reportSent.classList.remove('visible');
+    reportMessage.value = '';
+    breakdownBody.innerHTML = '';
+    lastResult = null;
+  }
+
+  function showResults(data) {
+    resultsSection.classList.add('visible');
+
+    if (data.suspicious) {
+      warningBanner.classList.add('visible');
+    }
+
+    // Total
+    resultDecimal.textContent = data.totalDecimal + ' hrs';
+    resultHmm.textContent     = data.totalHMM;
+    resultTotal.style.display = 'flex';
+
+    // ALV
+    if (data.alv > 0) {
+      alvValue.textContent   = data.alv + ' hrs';
+      alvRow.style.display   = 'flex';
+    }
+
+    // Breakdown
+    if (data.breakdown && data.breakdown.length) {
+      data.breakdown.forEach(row => {
+        const tr = document.createElement('tr');
+        if (row.label === 'Card Type') tr.classList.add('type-row');
+        tr.innerHTML = `<td>${row.label}</td><td>${row.value}</td>`;
+        breakdownBody.appendChild(tr);
+      });
+      breakdownCard.style.display = 'block';
+    }
+
+    btnReportToggle.style.display = 'block';
+  }
+
+  function showError(msg) {
+    resultsSection.classList.add('visible');
+    errorBanner.textContent = '⚠ ' + msg;
+    errorBanner.classList.add('visible');
+    btnReportToggle.style.display = 'block';
+  }
+
+  // ── REPORT ──
+  btnReportToggle.addEventListener('click', () => {
+    reportPanel.classList.toggle('visible');
+  });
+
+  btnReportSend.addEventListener('click', async () => {
+    btnReportSend.disabled = true;
+    btnReportSend.textContent = 'Sending…';
+
+    try {
+      await fetch('/.netlify/functions/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text:    lastRawText,
+          message: reportMessage.value.trim(),
+          result:  lastResult
+        })
+      });
+      reportSent.classList.add('visible');
+      btnReportSend.style.display = 'none';
+    } catch {
+      btnReportSend.disabled = false;
+      btnReportSend.textContent = 'Send Report';
+      alert('Could not send report. Please try again.');
+    }
+  });
+
+  // ── OCR / SCREENSHOT ──
+
+  // Initialize Tesseract worker lazily
+  async function getWorker() {
+    if (ocrWorker) return ocrWorker;
+    ocrStatus.textContent = 'Loading OCR engine…';
+    ocrStatus.classList.add('visible');
+    ocrWorker = await Tesseract.createWorker('eng', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round((m.progress || 0) * 100);
+          progressWrap.classList.add('visible');
+          progressBar.style.width = pct + '%';
+          ocrStatus.textContent = `Scanning image… ${pct}%`;
+        }
+      }
+    });
+    return ocrWorker;
+  }
+
+  async function processImageFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+
+    ocrStatus.classList.add('visible');
+    ocrStatus.textContent = 'Preparing image…';
+    progressWrap.classList.add('visible');
+    progressBar.style.width = '0%';
+
+    try {
+      const worker = await getWorker();
+      const { data } = await worker.recognize(file);
+
+      progressBar.style.width = '100%';
+      ocrStatus.textContent = `✓ Text extracted (confidence: ${Math.round(data.confidence)}%). Running calculation…`;
+
+      const extractedText = data.text.trim();
+      if (!extractedText) {
+        ocrStatus.textContent = '⚠ Could not extract any text from this image.';
+        return;
+      }
+
+      // Populate text area so user can see/verify what was extracted
+      textArea.value = extractedText;
+      lastRawText    = extractedText;
+
+      await runCalculation(extractedText);
+
+    } catch (err) {
+      ocrStatus.textContent = '⚠ OCR failed. Please try pasting the text directly instead.';
+    } finally {
+      setTimeout(() => {
+        progressWrap.classList.remove('visible');
+        progressBar.style.width = '0%';
+      }, 2000);
+    }
+  }
+
+  // Drag & drop
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) processImageFile(file);
+  });
+
+  // File input click
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) processImageFile(fileInput.files[0]);
+    fileInput.value = '';
+  });
+
+  // Paste anywhere (image or text)
+  document.addEventListener('paste', e => {
+    const items = e.clipboardData?.items || [];
+
+    // Check for image in clipboard first
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) processImageFile(file);
+        return;
+      }
+    }
+    // Otherwise let the browser paste into the textarea naturally
+  });
+</script>
+
+</body>
+</html>

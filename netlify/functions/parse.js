@@ -114,7 +114,7 @@ function computeTotals(text) {
   }
   return {cardType,breakdown,totalMins,totalHMM:_fromMinutes_(totalMins),totalDecimal:Math.round((totalMins/60)*100)/100,alv,suspicious:totalMins===0||ttlCredit===0,error:null};
 }
-async function sendEmail({ subject, body }) {
+async function sendEmail(subject, body) {
   const apiKey=process.env.RESEND_API_KEY, to=process.env.NOTIFY_EMAIL;
   if (!apiKey||!to) return;
   await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({from:'Timecard App <onboarding@resend.dev>',to:[to],subject,text:body})});

@@ -1,6 +1,6 @@
-# Delta Timecard Calculator
+# Timecard Calculator
 
-A privacy-first web app for calculating Delta Air Lines timecard pay hours.
+A privacy-first web app for calculating airline timecard pay hours.
 
 ## Features
 

@@ -146,24 +146,44 @@ function computeTotals(text) {
       {label:'DISTRIBUTED TRNG PAY', value:_fromMinutes_(trainingPay)},
     ];
   } else {
-    const {credit,resGuar,payback}=_grabReserveGuarLine_(text);
+    // Use _grabTtlCredit_ as the base — grabs last '= H:MM' in guarantee block,
+    // which is post-payback and far more resilient to OCR corruption than parsing
+    // the individual credit/resGuar/payback values from the math line.
+    const ttlCredit=_grabTtlCredit_(text);
+    // Try to get credit/resGuar breakdown for display — fall back gracefully
+    const guarLine=_grabReserveGuarLine_(text);
+    const guarFailed=guarLine.credit===0&&guarLine.resGuar===0&&ttlCredit>0;
     const rows=_parseRows_(text,'RES');
     const resAssignGSlip=_grabLabeledTimeFlex_(text,['RES ASSIGN-G/Q SLIP PAY','RES ASSIGN-G/Q-SLIP PAY','RES ASSIGN-G/SLIP PAY','RES ASSIGN G/SLIP PAY']);
     const payNoCredit=_calcReservePayNoCreditNoBlock_(rows);
     const addtlOnly=_calcReserveAddtlOnly_(rows);
-    totalMins=credit+resGuar+payNoCredit+addtlOnly+reroutePay+resAssignGSlip+trainingPay-payback;
-    suspicious=totalMins===0||(credit===0&&resGuar===0);
-    breakdown=[
-      {label:'Card Type',                       value:cardType},
-      {label:'Credit (trips w/ credit)',         value:_fromMinutes_(credit)},
-      {label:'RES Guarantee',                    value:_fromMinutes_(resGuar)},
-      {label:'Pay No Credit (LOSA, RRPY, etc)',  value:_fromMinutes_(payNoCredit)},
-      {label:'ADDTL Pay Only',                   value:_fromMinutes_(addtlOnly)},
-      {label:'Reroute Pay',                      value:_fromMinutes_(reroutePay)},
-      {label:'RES GS/QS/IA Pay',                value:_fromMinutes_(resAssignGSlip)},
-      {label:'Distributed Trng Pay',             value:_fromMinutes_(trainingPay)},
-      {label:'Payback (Neg Bank)',               value:payback>0?'-'+_fromMinutes_(payback):'0:00'},
-    ];
+    totalMins=ttlCredit+payNoCredit+addtlOnly+reroutePay+resAssignGSlip+trainingPay;
+    suspicious=totalMins===0||ttlCredit===0||guarFailed;
+    // Show detailed credit/resGuar breakdown when available, combined TTL CREDIT when not
+    if (!guarFailed) {
+      breakdown=[
+        {label:'Card Type',                       value:cardType},
+        {label:'Credit (trips w/ credit)',         value:_fromMinutes_(guarLine.credit)},
+        {label:'RES Guarantee',                    value:_fromMinutes_(guarLine.resGuar)},
+        {label:'Pay No Credit (LOSA, RRPY, etc)',  value:_fromMinutes_(payNoCredit)},
+        {label:'ADDTL Pay Only',                   value:_fromMinutes_(addtlOnly)},
+        {label:'Reroute Pay',                      value:_fromMinutes_(reroutePay)},
+        {label:'RES GS/QS/IA Pay',                value:_fromMinutes_(resAssignGSlip)},
+        {label:'Distributed Trng Pay',             value:_fromMinutes_(trainingPay)},
+        {label:'Payback (Neg Bank)',               value:guarLine.payback>0?'-'+_fromMinutes_(guarLine.payback):'0:00'},
+      ];
+    } else {
+      breakdown=[
+        {label:'Card Type',                       value:cardType},
+        {label:'TTL CREDIT (post-payback)',        value:_fromMinutes_(ttlCredit)},
+        {label:'Pay No Credit (LOSA, RRPY, etc)',  value:_fromMinutes_(payNoCredit)},
+        {label:'ADDTL Pay Only',                   value:_fromMinutes_(addtlOnly)},
+        {label:'Reroute Pay',                      value:_fromMinutes_(reroutePay)},
+        {label:'RES GS/QS/IA Pay',                value:_fromMinutes_(resAssignGSlip)},
+        {label:'Distributed Trng Pay',             value:_fromMinutes_(trainingPay)},
+        {label:'NOTE',                             value:'Guarantee math garbled by OCR'},
+      ];
+    }
   }
   return {cardType,breakdown,totalMins,totalHMM:_fromMinutes_(totalMins),totalDecimal:Math.round((totalMins/60)*100)/100,alv,suspicious,error:null};
 }

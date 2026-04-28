@@ -118,6 +118,8 @@ function _calcReserveAddtlOnly_(rows) {
   return total;
 }
 function computeTotals(text) {
+  // Strip common OCR noise artifacts before any parsing
+  text = _nbps_(text).replace(/~~\s*/g, '').replace(/\s{2,}/g, ' ');
   const cardType=_detectCardType_(text);
   if (!cardType) return {error:'unrecognized',cardType:null,breakdown:[],totalMins:0,totalHMM:'0:00',totalDecimal:0,alv:0,suspicious:true};
   const reroutePay=_grabLabeledTimeFlex_(text,['REROUTE PAY']);
@@ -125,7 +127,7 @@ function computeTotals(text) {
   const assignPay=_grabLabeledTimeFlex_(text,['ASSIGN PAY']);
   const trainingPay=_grabTrainingPay_(text);
   const alv=Math.round((_grabALV_(text)/60)*100)/100;
-  let totalMins, breakdown;
+  let totalMins, breakdown, suspicious;
   if (cardType==='LINEHOLDER') {
     const ttlCredit=_grabTtlCredit_(text);
     const rows=_parseRows_(text,'REG');
@@ -133,6 +135,7 @@ function computeTotals(text) {
     const addtlOnly=_calcLineholderAddtlOnly_(rows);
     const gSlip_x2=gSlipPay*2, assign_x2=assignPay*2;
     totalMins=ttlCredit+payTimeOnly+addtlOnly+gSlip_x2+assign_x2+trainingPay;
+    suspicious=totalMins===0||ttlCredit===0;
     breakdown=[
       {label:'Card Type',      value:cardType},
       {label:'TTL CREDIT',     value:_fromMinutes_(ttlCredit)},
@@ -149,6 +152,7 @@ function computeTotals(text) {
     const payNoCredit=_calcReservePayNoCreditNoBlock_(rows);
     const addtlOnly=_calcReserveAddtlOnly_(rows);
     totalMins=credit+resGuar+payNoCredit+addtlOnly+reroutePay+resAssignGSlip+trainingPay-payback;
+    suspicious=totalMins===0||(credit===0&&resGuar===0);
     breakdown=[
       {label:'Card Type',                       value:cardType},
       {label:'Credit (trips w/ credit)',         value:_fromMinutes_(credit)},
@@ -161,7 +165,7 @@ function computeTotals(text) {
       {label:'Payback (Neg Bank)',               value:payback>0?'-'+_fromMinutes_(payback):'0:00'},
     ];
   }
-  return {cardType,breakdown,totalMins,totalHMM:_fromMinutes_(totalMins),totalDecimal:Math.round((totalMins/60)*100)/100,alv,suspicious:totalMins===0||(credit===0&&resGuar===0&&cardType==='RESERVE'),error:null};
+  return {cardType,breakdown,totalMins,totalHMM:_fromMinutes_(totalMins),totalDecimal:Math.round((totalMins/60)*100)/100,alv,suspicious,error:null};
 }
 async function sendEmail({ subject, body }) {
   const apiKey=process.env.RESEND_API_KEY, to=process.env.NOTIFY_EMAIL;

@@ -53,17 +53,40 @@ function _grabALV_(text) {
 function _parseRows_(text, prefix) {
   text = _nbps_(text);
   const segRe = new RegExp(
-    '(\\d{2}[A-Z]{3})\\s+' + prefix + '\\s+([A-Z0-9/-]+)(.*?)(?=\\d{2}[A-Z]{3}\\s+' + prefix + '\\b|RES\\s+OTHER\\s+SUB\\s+TTL|CREDIT\\s+APPLICABLE|END OF DISPLAY|$)',
+    '(\\d{2}[A-Z]{3})\\s+' + prefix + '\\s+([A-Z0-9/-]+)(.*?)(?=' +
+      '\\d{2}[A-Z]{3}\\s+' + prefix + '\\b|' +
+      'RES\\s+OTHER\\s+SUB\\s+TTL|' +
+      'CREDIT\\s+APPLICABLE|' +
+      '\\d{1,3}:[0-5]\\d\\s*\\+\\s*\\d{1,3}:[0-5]\\d|' +  // guarantee math line
+      'END OF DISPLAY|$)',
     'gis'
   );
   const rows = []; let m;
-  while ((m = segRe.exec(text)) !== null) {
-    rows.push({ nbr: (m[2]||'').toUpperCase(), times: (m[0] || '').match(/\b\d{1,3}:[0-5]\d\b/g) || [] });
-  }
+  while ((m = segRe.exec(text)) !== null)
+    rows.push({ nbr: (m[2]||'').toUpperCase(), times: (m[0]||'').match(/\b\d{1,3}:[0-5]\d\b/g)||[] });
   return rows;
 }
+// Parse CREDIT, RES GUAR, and PAYBACK from the guarantee math line
+function _grabReserveGuarLine_(text) {
+  text = _nbps_(text);
+  const m = text.match(/(\d{1,3}:[0-5]\d)\s*\+\s*(\d{1,3}:[0-5]\d)\s*\+\s*(\d{1,3}:[0-5]\d)\s*=\s*(\d{1,3}:[0-5]\d)\s*-\s*(\d{1,3}:[0-5]\d)/);
+  if (m) return { credit: _toMinutes_(m[1]), resGuar: _toMinutes_(m[2]), payback: _toMinutes_(m[5]) };
+  return { credit: 0, resGuar: 0, payback: 0 };
+}
+// Lineholder pay-only: skip single-time rows (block-only) and any row with consecutive
+// equal times (those rows have credit already in TTL CREDIT — don't double-count).
+// Only rows with no consecutive equal times are genuine pay-only additions.
 function _calcLineholderPayTimeOnly_(rows) {
-  return rows.reduce((t,r) => r.times.length===1 ? t+_toMinutes_(r.times[0]) : t, 0);
+  let total = 0;
+  for (const r of rows) {
+    const t = r.times;
+    if (t.length < 2) continue; // single time = block-only row, ignore
+    let hasConsecEqual = false;
+    for (let i = 1; i < t.length; i++) { if (t[i] === t[i-1]) { hasConsecEqual = true; break; } }
+    if (hasConsecEqual) continue; // has credit, already in TTL CREDIT
+    total += _toMinutes_(t[t.length-1]); // genuine pay-only
+  }
+  return total;
 }
 function _calcLineholderAddtlOnly_(rows) {
   let total=0;
@@ -97,7 +120,6 @@ function _calcReserveAddtlOnly_(rows) {
 function computeTotals(text) {
   const cardType=_detectCardType_(text);
   if (!cardType) return {error:'unrecognized',cardType:null,breakdown:[],totalMins:0,totalHMM:'0:00',totalDecimal:0,alv:0,suspicious:true};
-  const ttlCredit=_grabTtlCredit_(text);
   const reroutePay=_grabLabeledTimeFlex_(text,['REROUTE PAY']);
   const gSlipPay=_grabLabeledTimeFlex_(text,['G/SLIP PAY','G - SLIP PAY','G SLIP PAY']);
   const assignPay=_grabLabeledTimeFlex_(text,['ASSIGN PAY']);
@@ -105,31 +127,43 @@ function computeTotals(text) {
   const alv=Math.round((_grabALV_(text)/60)*100)/100;
   let totalMins, breakdown;
   if (cardType==='LINEHOLDER') {
+    const ttlCredit=_grabTtlCredit_(text);
     const rows=_parseRows_(text,'REG');
     const payTimeOnly=_calcLineholderPayTimeOnly_(rows);
     const addtlOnly=_calcLineholderAddtlOnly_(rows);
     const gSlip_x2=gSlipPay*2, assign_x2=assignPay*2;
-    totalMins=ttlCredit+payTimeOnly+addtlOnly+gSlip_x2+assign_x2;
-    breakdown=[{label:'Card Type',value:cardType},{label:'TTL CREDIT',value:_fromMinutes_(ttlCredit)},{label:'PAY TIME ONLY',value:_fromMinutes_(payTimeOnly)},{label:'ADDTL PAY ONLY',value:_fromMinutes_(addtlOnly)},{label:'G/SLIP PAY ×2',value:_fromMinutes_(gSlip_x2)},{label:'ASSIGN PAY ×2',value:_fromMinutes_(assign_x2)}];
+    totalMins=ttlCredit+payTimeOnly+addtlOnly+gSlip_x2+assign_x2+trainingPay;
+    breakdown=[
+      {label:'Card Type',      value:cardType},
+      {label:'TTL CREDIT',     value:_fromMinutes_(ttlCredit)},
+      {label:'PAY TIME ONLY',  value:_fromMinutes_(payTimeOnly)},
+      {label:'ADDTL PAY ONLY', value:_fromMinutes_(addtlOnly)},
+      {label:'G/SLIP PAY ×2',  value:_fromMinutes_(gSlip_x2)},
+      {label:'ASSIGN PAY ×2',  value:_fromMinutes_(assign_x2)},
+      {label:'DISTRIBUTED TRNG PAY', value:_fromMinutes_(trainingPay)},
+    ];
   } else {
+    const {credit,resGuar,payback}=_grabReserveGuarLine_(text);
     const rows=_parseRows_(text,'RES');
     const resAssignGSlip=_grabLabeledTimeFlex_(text,['RES ASSIGN-G/Q SLIP PAY','RES ASSIGN-G/Q-SLIP PAY','RES ASSIGN-G/SLIP PAY','RES ASSIGN G/SLIP PAY']);
     const payNoCredit=_calcReservePayNoCreditNoBlock_(rows);
     const addtlOnly=_calcReserveAddtlOnly_(rows);
-    totalMins=ttlCredit+payNoCredit+addtlOnly+reroutePay+resAssignGSlip+trainingPay;
+    totalMins=credit+resGuar+payNoCredit+addtlOnly+reroutePay+resAssignGSlip+trainingPay-payback;
     breakdown=[
-      {label:'Card Type',            value:cardType},
-      {label:'TTL CREDIT',           value:_fromMinutes_(ttlCredit)},
-      {label:'PAY NO CREDIT (LOSA, RRPY, etc.)', value:_fromMinutes_(payNoCredit)},
-      {label:'ADDTL PAY ONLY',       value:_fromMinutes_(addtlOnly)},
-      {label:'RES ASSIGN / G·Q·S PAY', value:_fromMinutes_(resAssignGSlip)},
-      {label:'REROUTE PAY',          value:_fromMinutes_(reroutePay)},
-      {label:'DISTRIBUTED TRNG PAY', value:_fromMinutes_(trainingPay)},
+      {label:'Card Type',                       value:cardType},
+      {label:'Credit (trips w/ credit)',         value:_fromMinutes_(credit)},
+      {label:'RES Guarantee',                    value:_fromMinutes_(resGuar)},
+      {label:'Pay No Credit (LOSA, RRPY, etc)',  value:_fromMinutes_(payNoCredit)},
+      {label:'ADDTL Pay Only',                   value:_fromMinutes_(addtlOnly)},
+      {label:'Reroute Pay',                      value:_fromMinutes_(reroutePay)},
+      {label:'RES GS/QS/IA Pay',                value:_fromMinutes_(resAssignGSlip)},
+      {label:'Distributed Trng Pay',             value:_fromMinutes_(trainingPay)},
+      {label:'Payback (Neg Bank)',               value:payback>0?'-'+_fromMinutes_(payback):'0:00'},
     ];
   }
-  return {cardType,breakdown,totalMins,totalHMM:_fromMinutes_(totalMins),totalDecimal:Math.round((totalMins/60)*100)/100,alv,suspicious:totalMins===0||ttlCredit===0,error:null};
+  return {cardType,breakdown,totalMins,totalHMM:_fromMinutes_(totalMins),totalDecimal:Math.round((totalMins/60)*100)/100,alv,suspicious:totalMins===0||(credit===0&&resGuar===0&&cardType==='RESERVE'),error:null};
 }
-async function sendEmail(subject, body) {
+async function sendEmail({ subject, body }) {
   const apiKey=process.env.RESEND_API_KEY, to=process.env.NOTIFY_EMAIL;
   if (!apiKey||!to) return;
   await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({from:'Timecard App <onboarding@resend.dev>',to:[to],subject,text:body})});

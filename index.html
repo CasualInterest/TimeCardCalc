@@ -779,6 +779,18 @@
     return ocrWorker;
   }
 
+  // ── OCR HELPERS ──────────────────────────────────────────────────────────
+
+  // Trim OCR output to just the timecard block, discarding webpage chrome
+  function trimToTimecard(raw) {
+    const upper = raw.toUpperCase();
+    const start = upper.search(/MONTHLY\s+TIME\s+DATA/);
+    const end   = upper.search(/END\s+OF\s+DISPLAY/);
+    if (start === -1) return raw; // can't find header — return as-is
+    const tail = end !== -1 ? end + raw.slice(end).indexOf('\n') + 1 : raw.length;
+    return raw.slice(start, tail).trim();
+  }
+
   async function processImageFile(file) {
     if (!file || !file.type.startsWith('image/')) return;
 
@@ -787,18 +799,45 @@
     progressWrap.classList.add('visible');
     progressBar.style.width = '0%';
 
+    const MIN_CONFIDENCE = 60; // below this → ask for better image
+
     try {
       const worker = await getWorker();
       const { data } = await worker.recognize(file);
 
       progressBar.style.width = '100%';
-      ocrStatus.textContent = `✓ Text extracted (confidence: ${Math.round(data.confidence)}%). Running calculation…`;
+      const confidence = Math.round(data.confidence);
 
-      const extractedText = data.text.trim();
+      // ── CONFIDENCE CHECK ─────────────────────────────────────────────
+      if (confidence < MIN_CONFIDENCE) {
+        ocrStatus.textContent = `⚠ Image quality too low (${confidence}% confidence).`;
+        ocrStatus.style.color = 'var(--red)';
+        // Show user-friendly guidance in the results area
+        resetResults();
+        resultsSection.classList.add('visible');
+        errorBanner.innerHTML =
+          `<strong>Image quality too low to read accurately (${confidence}% confidence).</strong><br><br>` +
+          `For best results, please either:<br>` +
+          `&nbsp;&nbsp;• Paste the timecard text directly using the <strong>Primary</strong> input above<br>` +
+          `&nbsp;&nbsp;• Upload a higher resolution screenshot (zoom in on the timecard before screenshotting)`;
+        errorBanner.classList.add('visible');
+        btnReportToggle.style.display = 'block';
+        return;
+      }
+
+      // ── AUTO-TRIM TO TIMECARD BLOCK ───────────────────────────────────
+      let extractedText = trimToTimecard(data.text.trim());
+
       if (!extractedText) {
         ocrStatus.textContent = '⚠ Could not extract any text from this image.';
         return;
       }
+
+      const wasTrimmed = !data.text.trim().toUpperCase().startsWith('MONTHLY');
+      ocrStatus.textContent = wasTrimmed
+        ? `✓ Timecard region detected and extracted (${confidence}% confidence). Running calculation…`
+        : `✓ Text extracted (${confidence}% confidence). Running calculation…`;
+      ocrStatus.style.color = 'var(--amber)';
 
       // Populate text area so user can see/verify what was extracted
       textArea.value = extractedText;
@@ -812,7 +851,8 @@
       setTimeout(() => {
         progressWrap.classList.remove('visible');
         progressBar.style.width = '0%';
-      }, 2000);
+        ocrStatus.style.color = ''; // reset color
+      }, 4000);
     }
   }
 

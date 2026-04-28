@@ -93,8 +93,18 @@ function _calcLineholderAddtlOnly_(rows) {
   for (const r of rows) if (r.times.length>=2) { const p=_toMinutes_(r.times[r.times.length-2]),l=_toMinutes_(r.times[r.times.length-1]); if(l<p)total+=l; }
   return total;
 }
+// Known no-credit non-trip codes. Non-trip rows NOT in this list default to "has credit"
+// (e.g. ALPP, SICK, IOEP, ALPE, HOL) — this prevents OCR-corrupted triplets from being double-counted.
+function _isKnownNoCredit_(nbr) {
+  const n = nbr.toUpperCase();
+  if (/^ADJ/.test(n)) return true; // ADJ-RRPY and all ADJ- variants
+  return ['LOSA','LOFB'].includes(n);
+}
+
 // Reserve: pay-no-credit rows WITHOUT block hours (LOSA, ADJ-RRPY, etc.)
-// Rows WITH block hours that have no credit are captured by the RES ASSIGN labeled line — don't double count.
+// Trip rows (pure digit NBR) use block-hours detection.
+// Non-trip rows (letters in NBR) must be in _isKnownNoCredit_ to be counted —
+// this guards against OCR dropping a credit-triplet's first value (e.g. ALPP → doublet).
 function _calcReservePayNoCreditNoBlock_(rows) {
   let total=0;
   for (const r of rows) {
@@ -104,8 +114,16 @@ function _calcReservePayNoCreditNoBlock_(rows) {
     if (hasTriplet) continue;
     const hasMidTriplet=t.length>=4&&t[t.length-2]===t[t.length-3]&&t[t.length-3]===t[t.length-4];
     if (hasMidTriplet) continue;
-    const hasBlockHrs=mins.length>=2&&mins[0]<mins[1];
-    if (hasBlockHrs) continue; // flows into RES ASSIGN labeled line
+    const isTrip=/^\d+$/.test(r.nbr); // pure digits = trip number (0558, 0719, etc.)
+    if (isTrip) {
+      // Trip rows: skip if they have block hours (flow into RES ASSIGN labeled line)
+      const hasBlockHrs=mins.length>=2&&mins[0]<mins[1];
+      if (hasBlockHrs) continue;
+    } else {
+      // Non-trip rows (LOSA, SICK, ALPP, ADJ-RRPY, etc.):
+      // only add if explicitly in the known no-credit list — guards against OCR-corrupted triplets
+      if (!_isKnownNoCredit_(r.nbr)) continue;
+    }
     if (t.length>=2&&t[t.length-1]===t[t.length-2]) total+=mins[mins.length-1];
     else if (t.length===1) total+=mins[0];
   }

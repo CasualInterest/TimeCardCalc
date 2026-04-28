@@ -160,6 +160,26 @@
     .btn-calculate:hover:not(:disabled) { background: #a50d24; }
     .btn-calculate:disabled { opacity: 0.45; cursor: not-allowed; }
 
+    /* ── CLEAR BUTTON ── */
+    .btn-clear {
+      height: 46px;
+      padding: 0 1.25rem;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 3px;
+      font-family: var(--cond);
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color 0.15s, color 0.15s;
+      flex-shrink: 0;
+    }
+    .btn-clear:hover { border-color: var(--muted); color: var(--white); }
+
     /* ── SCREENSHOT SECTION ── */
     .screenshot-card {
       border: 1px dashed var(--border);
@@ -479,7 +499,10 @@
           placeholder="Paste your full timecard text here (Ctrl+V or Cmd+V)&#10;&#10;This is the recommended method for most accurate results."
           rows="7"
         ></textarea>
-        <button class="btn-calculate" id="btn-calc-text">Calculate Pay Hours</button>
+        <div style="display:flex; gap:0.6rem; margin-top:0.85rem;">
+          <button class="btn-calculate" id="btn-calc-text" style="margin-top:0; flex:1;">Calculate Pay Hours</button>
+          <button class="btn-clear" id="btn-clear">Clear All</button>
+        </div>
       </div>
     </div>
   </section>
@@ -528,7 +551,7 @@
     </div>
 
     <div class="alv-row" id="alv-row" style="display:none;">
-      <span class="alv-label">ALV (Average Line Value)</span>
+      <span class="alv-label">ALV (Available Leave Value)</span>
       <span class="alv-value" id="alv-value">—</span>
     </div>
 
@@ -546,14 +569,14 @@
 
     <!-- Report -->
     <button class="report-trigger" id="btn-report-toggle" style="display:none;">
-      ⚑ Report an Error with This Result
+      ⚑ Send for Error Checking
     </button>
     <div class="report-panel" id="report-panel">
       <div>
         <label for="report-message">Describe the issue (optional)</label>
         <textarea
           id="report-message"
-          placeholder="e.g. The total looks too high — I had a sick day that shouldn't be counted, or the card type was wrong."
+          placeholder="Describe what looks wrong or what you expected to see (optional)."
         ></textarea>
       </div>
       <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
@@ -596,6 +619,20 @@
   const reportMessage   = document.getElementById('report-message');
   const btnReportSend   = document.getElementById('btn-report-send');
   const reportSent      = document.getElementById('report-sent');
+  const btnClear        = document.getElementById('btn-clear');
+
+  // ── CLEAR ALL ──
+  btnClear.addEventListener('click', () => {
+    textArea.value   = '';
+    lastRawText      = '';
+    lastResult       = null;
+    ocrStatus.textContent = '';
+    ocrStatus.classList.remove('visible');
+    progressWrap.classList.remove('visible');
+    progressBar.style.width = '0%';
+    resetResults();
+    textArea.focus();
+  });
 
   // ── CALCULATE FROM TEXT ──
   btnCalcText.addEventListener('click', async () => {

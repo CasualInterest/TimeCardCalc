@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Timecard Calculator</title>
+  <title>Timecard Calculator — Beta</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet" />
@@ -71,6 +71,38 @@
       margin-left: auto;
       letter-spacing: 0.1em;
     }
+    .beta-tag {
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--amber);
+      border: 1px solid var(--amber-dim);
+      background: rgba(232,160,32,0.08);
+      padding: 0.15rem 0.45rem;
+      border-radius: 2px;
+      vertical-align: middle;
+      margin-left: 0.5rem;
+    }
+
+    /* ── BETA NOTICE BANNER ── */
+    .beta-notice {
+      width: 100%;
+      background: rgba(232,160,32,0.06);
+      border-bottom: 1px solid var(--amber-dim);
+      padding: 0.65rem 2rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+    .beta-notice-icon { font-size: 0.85rem; flex-shrink: 0; margin-top: 0.05rem; }
+    .beta-notice-text {
+      font-family: var(--sans);
+      font-size: 0.72rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .beta-notice-text strong { color: var(--amber); font-weight: 600; }
 
     /* ── MAIN LAYOUT ── */
     main {
@@ -480,9 +512,17 @@
 
 <header>
   <div class="logo-stripe"></div>
-  <h1>Timecard Calculator</h1>
+  <h1>Timecard Calculator <span class="beta-tag">Beta</span></h1>
   <span class="version">Pay Period Tool</span>
 </header>
+
+<div class="beta-notice">
+  <span class="beta-notice-icon">⚠</span>
+  <p class="beta-notice-text">
+    <strong>Beta Test Version — This app is in active development.</strong>
+    It may produce incorrect results. When errors occur or are reported, a copy of the input data is automatically logged to help improve accuracy, then permanently deleted. No personal information is retained beyond the current session. Every test submission helps make the app better.
+  </p>
+</div>
 
 <main>
 
@@ -592,9 +632,10 @@
 
 <script>
   // ── STATE ──
-  let lastRawText   = '';
-  let lastResult    = null;
-  let ocrWorker     = null;
+  let lastRawText      = '';
+  let lastResult       = null;
+  let lastScreenshot   = null; // { data: base64, name: filename, type: mime }
+  let ocrWorker        = null;
 
   // ── ELEMENTS ──
   const textArea        = document.getElementById('timecard-text');
@@ -626,6 +667,7 @@
     textArea.value   = '';
     lastRawText      = '';
     lastResult       = null;
+    lastScreenshot   = null;
     ocrStatus.textContent = '';
     ocrStatus.classList.remove('visible');
     progressWrap.classList.remove('visible');
@@ -745,9 +787,10 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text:    lastRawText,
-          message: reportMessage.value.trim(),
-          result:  lastResult
+          text:       lastRawText,
+          message:    reportMessage.value.trim(),
+          result:     lastResult,
+          screenshot: lastScreenshot
         })
       });
       reportSent.classList.add('visible');
@@ -802,6 +845,13 @@
     const MIN_CONFIDENCE = 60; // below this → ask for better image
 
     try {
+      // Store screenshot for potential error report attachment
+      lastScreenshot = await new Promise((res) => {
+        const reader = new FileReader();
+        reader.onload = () => res({ data: reader.result.split(',')[1], name: file.name || 'screenshot.png', type: file.type || 'image/png' });
+        reader.readAsDataURL(file);
+      });
+
       const worker = await getWorker();
       const { data } = await worker.recognize(file);
 

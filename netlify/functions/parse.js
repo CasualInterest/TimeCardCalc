@@ -98,7 +98,7 @@ function _calcLineholderAddtlOnly_(rows) {
 function _isKnownNoCredit_(nbr) {
   const n = nbr.toUpperCase();
   if (/^ADJ/.test(n)) return true; // ADJ-RRPY and all ADJ- variants
-  return ['LOSA','LOFB'].includes(n);
+  return ['LOSA','LOFB','VAC'].includes(n);
 }
 
 // Reserve: pay-no-credit rows WITHOUT block hours (LOSA, ADJ-RRPY, etc.)
@@ -129,10 +129,23 @@ function _calcReservePayNoCreditNoBlock_(rows) {
   }
   return total;
 }
-// ADDTL column: last time < second-to-last
+// ADDTL column: last time < second-to-last.
+// Guard: for rows with a middle doublet (sked=pay) + block hours, if trailing > block hours
+// it's partial credit in the credit column, not addtl — skip it to avoid double-counting.
 function _calcReserveAddtlOnly_(rows) {
   let total=0;
-  for (const r of rows) if (r.times.length>=2) { const p=_toMinutes_(r.times[r.times.length-2]),l=_toMinutes_(r.times[r.times.length-1]); if(l>0&&l<p)total+=l; }
+  for (const r of rows) {
+    if (r.times.length < 2) continue;
+    const t=r.times, mins=t.map(_toMinutes_);
+    const p=mins[mins.length-2], l=mins[mins.length-1];
+    if (l<=0||l>=p) continue;
+    const hasTriplet=t.length>=3&&t[t.length-1]===t[t.length-2]&&t[t.length-2]===t[t.length-3];
+    if (!hasTriplet&&t.length>=4) {
+      const hasMiddleDoublet=mins[mins.length-2]===mins[mins.length-3];
+      if (hasMiddleDoublet&&l>mins[0]) continue; // trailing > block hrs = partial credit, not addtl
+    }
+    total+=l;
+  }
   return total;
 }
 function computeTotals(text) {

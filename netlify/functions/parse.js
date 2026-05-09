@@ -98,7 +98,7 @@ function _calcLineholderAddtlOnly_(rows) {
 function _isKnownNoCredit_(nbr) {
   const n = nbr.toUpperCase();
   if (/^ADJ/.test(n)) return true; // ADJ-RRPY and all ADJ- variants
-  return ['LOSA','LOFB','VAC'].includes(n);
+  return ['LOSA','LOFB','VAC','4F1C'].includes(n);
 }
 
 // Reserve: pay-no-credit rows WITHOUT block hours (LOSA, ADJ-RRPY, etc.)

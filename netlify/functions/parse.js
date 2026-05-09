@@ -150,7 +150,10 @@ function _calcReserveAddtlOnly_(rows) {
 }
 function computeTotals(text) {
   // Strip common OCR noise artifacts before any parsing
-  text = _nbps_(text).replace(/~~\s*/g, '').replace(/\s{2,}/g, ' ');
+    text = _nbps_(text).replace(/~~\s*/g, '').replace(/\s{2,}/g, ' ');
+  // Fix OCR date corruption: leading letter misread as digit (e.g. Q9MAY→09MAY)
+  const MONTHS = 'JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC';
+  text = text.replace(new RegExp('\\b([A-Z])(\\d)(' + MONTHS + ')\\b', 'g'), '0$2$3');
   const cardType=_detectCardType_(text);
   if (!cardType) return {error:'unrecognized',cardType:null,breakdown:[],totalMins:0,totalHMM:'0:00',totalDecimal:0,alv:0,suspicious:true};
   const reroutePay=_grabLabeledTimeFlex_(text,['REROUTE PAY']);

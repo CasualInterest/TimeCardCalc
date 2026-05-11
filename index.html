@@ -312,10 +312,25 @@
       color: var(--white);
       line-height: 1;
     }
+    .result-total-hmm {
+      font-family: var(--mono);
+      font-size: 2.2rem;
+      font-weight: 500;
+      color: var(--muted);
+      line-height: 1;
+    }
+    .result-total-divider {
+      font-family: var(--mono);
+      font-size: 1.2rem;
+      color: var(--border);
+      line-height: 1;
+      align-self: center;
+    }
     .result-total-sub {
       font-family: var(--mono);
-      font-size: 0.8rem;
+      font-size: 0.72rem;
       color: var(--muted);
+      margin-top: 0.3rem;
     }
 
     /* ALV row */
@@ -583,11 +598,18 @@
     <div class="error-banner" id="error-banner"></div>
 
     <div class="result-total" id="result-total" style="display:none;">
-      <div>
-        <div class="result-total-label">Total Billable Hours</div>
-        <div class="result-total-sub" id="result-hmm">—</div>
+      <div class="result-total-label">Total Billable Hours</div>
+      <div style="display:flex; align-items:baseline; gap:0.75rem;">
+        <div>
+          <div class="result-total-hmm" id="result-hmm">—</div>
+          <div class="result-total-sub">H:MM</div>
+        </div>
+        <div class="result-total-divider">/</div>
+        <div>
+          <div class="result-total-value" id="result-decimal">—</div>
+          <div class="result-total-sub">decimal</div>
+        </div>
       </div>
-      <div class="result-total-value" id="result-decimal">—</div>
     </div>
 
     <div class="alv-row" id="alv-row" style="display:none;">

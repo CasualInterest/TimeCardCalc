@@ -459,6 +459,20 @@
       min-height: 80px;
       font-size: 0.78rem;
     }
+    .report-email-input {
+      width: 100%;
+      background: var(--navy);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--white);
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      padding: 0.6rem 0.85rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .report-email-input:focus { border-color: var(--red); }
+    .report-email-input::placeholder { color: var(--muted); opacity: 0.6; }
     .btn-report {
       align-self: flex-end;
       background: none;
@@ -647,6 +661,15 @@
       placeholder="Describe what looks wrong or what you expected to see (optional)."
     ></textarea>
   </div>
+  <div>
+    <label for="report-email">Your email address (optional)</label>
+    <input
+      type="email"
+      class="report-email-input"
+      id="report-email"
+      placeholder="Leave your email for follow-up on this issue or bug fix notifications."
+    />
+  </div>
   <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
     <span class="report-sent" id="report-sent">✓ Report sent. Thank you.</span>
     <button class="btn-report" id="btn-report-send">Send Report</button>
@@ -688,6 +711,7 @@
   const btnReportToggle = document.getElementById('btn-report-toggle');
   const reportPanel     = document.getElementById('report-panel');
   const reportMessage   = document.getElementById('report-message');
+  const reportEmail     = document.getElementById('report-email');
   const btnReportSend   = document.getElementById('btn-report-send');
   const reportSent      = document.getElementById('report-sent');
   const btnClear        = document.getElementById('btn-clear');
@@ -698,6 +722,7 @@
     lastRawText      = '';
     lastResult       = null;
     lastScreenshot   = null;
+    if (reportEmail) reportEmail.value = '';
     ocrStatus.textContent = '';
     ocrStatus.classList.remove('visible');
     progressWrap.classList.remove('visible');
@@ -819,6 +844,7 @@
         body: JSON.stringify({
           text:       lastRawText,
           message:    reportMessage.value.trim(),
+          userEmail:  reportEmail.value.trim(),
           result:     lastResult,
           screenshot: lastScreenshot
         })

@@ -898,6 +898,72 @@
 
   // ── OCR HELPERS ──────────────────────────────────────────────────────────
 
+  // Auto-crop screenshot to the white content area before OCR.
+  // Scans pixel rows from the top to skip colored headers/nav bars (iCrew, etc.)
+  // and from the bottom to skip footer buttons. Returns a cropped Blob or the
+  // original file if no meaningful crop is found.
+  async function autoCropToContent(file) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width  = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          const { data: px } = ctx.getImageData(0, 0, img.width, img.height);
+          const w = img.width, h = img.height;
+
+          // Find first row that is >80% near-white pixels (content area start)
+          let topY = 0;
+          for (let y = 0; y < h; y++) {
+            let light = 0;
+            for (let x = 0; x < w; x++) {
+              const i = (y * w + x) * 4;
+              if (px[i] > 215 && px[i+1] > 215 && px[i+2] > 215) light++;
+            }
+            if (light / w > 0.80) { topY = Math.max(0, y - 4); break; }
+          }
+
+          // Find last row that has >1% dark pixels (text present = content end)
+          let botY = h;
+          for (let y = h - 1; y > topY + 50; y--) {
+            let dark = 0;
+            for (let x = 0; x < w; x++) {
+              const i = (y * w + x) * 4;
+              if (px[i] < 80 && px[i+1] < 80 && px[i+2] < 80) dark++;
+            }
+            if (dark / w > 0.01) { botY = Math.min(h, y + 8); break; }
+          }
+
+          // Only crop if we trimmed more than 5% from the top
+          if (topY > h * 0.05) {
+            const out = document.createElement('canvas');
+            out.width  = w;
+            out.height = botY - topY;
+            out.getContext('2d').drawImage(canvas, 0, topY, w, botY - topY, 0, 0, w, botY - topY);
+            out.toBlob(blob => {
+              URL.revokeObjectURL(url);
+              resolve(blob || file);
+            }, file.type || 'image/png', 0.95);
+          } else {
+            URL.revokeObjectURL(url);
+            resolve(file);
+          }
+        } catch {
+          URL.revokeObjectURL(url);
+          resolve(file);
+        }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
+
+
   // Trim OCR output to just the timecard block, discarding webpage chrome
   function trimToTimecard(raw) {
     const upper = raw.toUpperCase();
@@ -919,15 +985,20 @@
     const MIN_CONFIDENCE = 60; // below this → ask for better image
 
     try {
-      // Store screenshot for potential error report attachment
+      // Store original screenshot for potential error report attachment
       lastScreenshot = await new Promise((res) => {
         const reader = new FileReader();
         reader.onload = () => res({ data: reader.result.split(',')[1], name: file.name || 'screenshot.png', type: file.type || 'image/png' });
         reader.readAsDataURL(file);
       });
 
+      // Auto-crop to content area before OCR (removes colored headers/nav bars)
+      ocrStatus.textContent = 'Cropping to timecard area…';
+      const fileToProcess = await autoCropToContent(file);
+      const wasCropped = fileToProcess !== file;
+
       const worker = await getWorker();
-      const { data } = await worker.recognize(file);
+      const { data } = await worker.recognize(fileToProcess);
 
       progressBar.style.width = '100%';
       const confidence = Math.round(data.confidence);
@@ -979,8 +1050,8 @@
       }
 
       const wasTrimmed = !data.text.trim().toUpperCase().startsWith('MONTHLY');
-      ocrStatus.textContent = wasTrimmed
-        ? `✓ Timecard region detected and extracted (${confidence}% confidence). Running calculation…`
+      ocrStatus.textContent = (wasCropped || wasTrimmed)
+        ? `✓ Timecard area auto-cropped and extracted (${confidence}% confidence). Running calculation…`
         : `✓ Text extracted (${confidence}% confidence). Running calculation…`;
       ocrStatus.style.color = 'var(--amber)';
 

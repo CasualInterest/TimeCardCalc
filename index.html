@@ -688,6 +688,7 @@
   let lastRawText      = '';
   let lastResult       = null;
   let lastScreenshot   = null; // { data: base64, name: filename, type: mime }
+  let lastInputWasOCR  = false;
   let ocrWorker        = null;
 
   // ── ELEMENTS ──
@@ -722,6 +723,7 @@
     lastRawText      = '';
     lastResult       = null;
     lastScreenshot   = null;
+    lastInputWasOCR  = false;
     if (reportEmail) reportEmail.value = '';
     ocrStatus.textContent = '';
     ocrStatus.classList.remove('visible');
@@ -735,7 +737,8 @@
   btnCalcText.addEventListener('click', async () => {
     const text = textArea.value.trim();
     if (!text) return;
-    lastRawText = text;
+    lastRawText     = text;
+    lastInputWasOCR = false;
     await runCalculation(text);
   });
 
@@ -790,6 +793,21 @@
   }
 
   function showResults(data) {
+    // If OCR input produced a suspicious result, don't show it —
+    // an unreliable answer is worse than no answer.
+    if (lastInputWasOCR && data.suspicious) {
+      resultsSection.classList.add('visible');
+      errorBanner.innerHTML =
+        `<strong>Screenshot could not be read accurately enough to calculate.</strong><br><br>` +
+        `The OCR detected some data but the result cannot be verified. ` +
+        `Please <strong>copy and paste the timecard text</strong> using the ` +
+        `<strong>Primary</strong> input above for an accurate result.<br><br>` +
+        `If you'd like to report this screenshot for review, use the button below.`;
+      errorBanner.classList.add('visible');
+      btnReportToggle.style.display = 'block';
+      return;
+    }
+
     resultsSection.classList.add('visible');
 
     if (data.suspicious) {
@@ -967,8 +985,9 @@
       ocrStatus.style.color = 'var(--amber)';
 
       // Populate text area so user can see/verify what was extracted
-      textArea.value = extractedText;
-      lastRawText    = extractedText;
+      textArea.value  = extractedText;
+      lastRawText     = extractedText;
+      lastInputWasOCR = true;
 
       await runCalculation(extractedText);
 

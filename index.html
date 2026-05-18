@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -537,7 +536,6 @@
     }
     #results.visible { animation: fadeUp 0.3s ease; }
   </style>
-
 </head>
 <body>
 
@@ -558,7 +556,6 @@
 <main>
 
   <!-- ── TEXT INPUT (PRIMARY) ── -->
-
   <section>
     <div class="section-label">
       Timecard Text
@@ -582,7 +579,6 @@
   <hr class="divider" />
 
   <!-- ── SCREENSHOT INPUT (BETA) ── -->
-
   <section>
     <div class="section-label">
       Screenshot Upload
@@ -606,77 +602,73 @@
   </section>
 
   <!-- ── RESULTS ── -->
-
   <section id="results">
     <div class="section-label">Results</div>
 
-```
-<div class="warning-banner" id="warning-banner">
-  ⚠ The parser returned a result that may be incomplete. The raw input has been automatically sent to the developer for review. Please verify this result and use the report button below if something looks wrong.
-</div>
-
-<div class="error-banner" id="error-banner"></div>
-
-<div class="result-total" id="result-total" style="display:none;">
-  <div class="result-total-label">Total Billable Hours</div>
-  <div style="display:flex; align-items:baseline; gap:0.75rem;">
-    <div>
-      <div class="result-total-hmm" id="result-hmm">—</div>
-      <div class="result-total-sub">H:MM</div>
+    <div class="warning-banner" id="warning-banner">
+      ⚠ The parser returned a result that may be incomplete. The raw input has been automatically sent to the developer for review. Please verify this result and use the report button below if something looks wrong.
     </div>
-    <div class="result-total-divider">/</div>
-    <div>
-      <div class="result-total-value" id="result-decimal">—</div>
-      <div class="result-total-sub">decimal</div>
+
+    <div class="error-banner" id="error-banner"></div>
+
+    <div class="result-total" id="result-total" style="display:none;">
+      <div class="result-total-label">Total Billable Hours</div>
+      <div style="display:flex; align-items:baseline; gap:0.75rem;">
+        <div>
+          <div class="result-total-hmm" id="result-hmm">—</div>
+          <div class="result-total-sub">H:MM</div>
+        </div>
+        <div class="result-total-divider">/</div>
+        <div>
+          <div class="result-total-value" id="result-decimal">—</div>
+          <div class="result-total-sub">decimal</div>
+        </div>
+      </div>
     </div>
-  </div>
-</div>
 
-<div class="alv-row" id="alv-row" style="display:none;">
-  <span class="alv-label">ALV (Available Leave Value)</span>
-  <span class="alv-value" id="alv-value">—</span>
-</div>
+    <div class="alv-row" id="alv-row" style="display:none;">
+      <span class="alv-label">ALV (Available Leave Value)</span>
+      <span class="alv-value" id="alv-value">—</span>
+    </div>
 
-<div class="card" id="breakdown-card" style="display:none;">
-  <table class="breakdown-table">
-    <thead>
-      <tr>
-        <th>Component</th>
-        <th style="text-align:right;">Time</th>
-      </tr>
-    </thead>
-    <tbody id="breakdown-body"></tbody>
-  </table>
-</div>
+    <div class="card" id="breakdown-card" style="display:none;">
+      <table class="breakdown-table">
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th style="text-align:right;">Time</th>
+          </tr>
+        </thead>
+        <tbody id="breakdown-body"></tbody>
+      </table>
+    </div>
 
-<!-- Report -->
-<button class="report-trigger" id="btn-report-toggle" style="display:none;">
-  ⚑ Send for Error Checking
-</button>
-<div class="report-panel" id="report-panel">
-  <div>
-    <label for="report-message">Describe the issue (optional)</label>
-    <textarea
-      id="report-message"
-      placeholder="Describe what looks wrong or what you expected to see (optional)."
-    ></textarea>
-  </div>
-  <div>
-    <label for="report-email">Your email address (optional)</label>
-    <input
-      type="email"
-      class="report-email-input"
-      id="report-email"
-      placeholder="Leave your email for follow-up on this issue or bug fix notifications."
-    />
-  </div>
-  <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
-    <span class="report-sent" id="report-sent">✓ Report sent. Thank you.</span>
-    <button class="btn-report" id="btn-report-send">Send Report</button>
-  </div>
-</div>
-```
-
+    <!-- Report -->
+    <button class="report-trigger" id="btn-report-toggle" style="display:none;">
+      ⚑ Send for Error Checking
+    </button>
+    <div class="report-panel" id="report-panel">
+      <div>
+        <label for="report-message">Describe the issue (optional)</label>
+        <textarea
+          id="report-message"
+          placeholder="Describe what looks wrong or what you expected to see (optional)."
+        ></textarea>
+      </div>
+      <div>
+        <label for="report-email">Your email address (optional)</label>
+        <input
+          type="email"
+          class="report-email-input"
+          id="report-email"
+          placeholder="Leave your email for follow-up on this issue or bug fix notifications."
+        />
+      </div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+        <span class="report-sent" id="report-sent">✓ Report sent. Thank you.</span>
+        <button class="btn-report" id="btn-report-send">Send Report</button>
+      </div>
+    </div>
   </section>
 
 </main>
@@ -916,18 +908,24 @@
           const { data: px } = ctx.getImageData(0, 0, img.width, img.height);
           const w = img.width, h = img.height;
 
-          // Find first row that is >80% near-white pixels (content area start)
+          // Scan rows from top to find first row that is BOTH:
+          // - >85% near-white pixels (content background)
+          // - AND contains some dark pixels (actual text present)
+          // This avoids cutting into blank white space at the start of the content.
           let topY = 0;
           for (let y = 0; y < h; y++) {
-            let light = 0;
+            let light = 0, dark = 0;
             for (let x = 0; x < w; x++) {
               const i = (y * w + x) * 4;
-              if (px[i] > 215 && px[i+1] > 215 && px[i+2] > 215) light++;
+              const r = px[i], g = px[i+1], b = px[i+2];
+              if (r > 215 && g > 215 && b > 215) light++;
+              if (r < 80  && g < 80  && b < 80)  dark++;
             }
-            if (light / w > 0.80) { topY = Math.max(0, y - 4); break; }
+            // Row is white AND has text → start of content
+            if (light / w > 0.85 && dark / w > 0.001) { topY = Math.max(0, y - 10); break; }
           }
 
-          // Find last row that has >1% dark pixels (text present = content end)
+          // Find last row with text (dark pixels)
           let botY = h;
           for (let y = h - 1; y > topY + 50; y--) {
             let dark = 0;
@@ -935,11 +933,11 @@
               const i = (y * w + x) * 4;
               if (px[i] < 80 && px[i+1] < 80 && px[i+2] < 80) dark++;
             }
-            if (dark / w > 0.01) { botY = Math.min(h, y + 8); break; }
+            if (dark / w > 0.005) { botY = Math.min(h, y + 15); break; }
           }
 
-          // Only crop if we trimmed more than 5% from the top
-          if (topY > h * 0.05) {
+          // Only crop if we trimmed more than 8% from the top (avoid over-cropping)
+          if (topY > h * 0.08) {
             const out = document.createElement('canvas');
             out.width  = w;
             out.height = botY - topY;

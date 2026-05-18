@@ -116,6 +116,8 @@ function _calcReservePayNoCreditNoBlock_(rows) {
     if (hasMidTriplet) continue;
     const isTrip=/^\d+$/.test(r.nbr); // pure digits = trip number (0558, 0719, etc.)
     if (isTrip) {
+      // Single-time trip rows = block-only with garbled sked/pay (OCR) — skip entirely
+      if (t.length < 2) continue;
       // Trip rows: skip if they have block hours (flow into RES ASSIGN labeled line)
       const hasBlockHrs=mins.length>=2&&mins[0]<mins[1];
       if (hasBlockHrs) continue;
@@ -140,7 +142,10 @@ function _calcReserveAddtlOnly_(rows) {
     const p=mins[mins.length-2], l=mins[mins.length-1];
     if (l<=0||l>=p) continue;
     const hasTriplet=t.length>=3&&t[t.length-1]===t[t.length-2]&&t[t.length-2]===t[t.length-3];
-    if (!hasTriplet&&t.length>=4) {
+    const hasMidTriplet=t.length>=4&&t[t.length-2]===t[t.length-3]&&t[t.length-3]===t[t.length-4];
+    // Partial credit guard: only applies when there is NO triplet present.
+    // If hasMidTriplet is true, full credit is confirmed — trailing value is addtl, not partial credit.
+    if (!hasTriplet&&!hasMidTriplet&&t.length>=4) {
       const hasMiddleDoublet=mins[mins.length-2]===mins[mins.length-3];
       if (hasMiddleDoublet&&l>mins[0]) continue; // trailing > block hrs = partial credit, not addtl
     }
@@ -150,10 +155,7 @@ function _calcReserveAddtlOnly_(rows) {
 }
 function computeTotals(text) {
   // Strip common OCR noise artifacts before any parsing
-    text = _nbps_(text).replace(/~~\s*/g, '').replace(/\s{2,}/g, ' ');
-  // Fix OCR date corruption: leading letter misread as digit (e.g. Q9MAY→09MAY)
-  const MONTHS = 'JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC';
-  text = text.replace(new RegExp('\\b([A-Z])(\\d)(' + MONTHS + ')\\b', 'g'), '0$2$3');
+  text = _nbps_(text).replace(/~~\s*/g, '').replace(/\s{2,}/g, ' ');
   const cardType=_detectCardType_(text);
   if (!cardType) return {error:'unrecognized',cardType:null,breakdown:[],totalMins:0,totalHMM:'0:00',totalDecimal:0,alv:0,suspicious:true};
   const reroutePay=_grabLabeledTimeFlex_(text,['REROUTE PAY']);

@@ -582,14 +582,14 @@
   <section>
     <div class="section-label">
       Screenshot Upload
-      <span class="badge badge-beta">⚠ Beta — may be less accurate</span>
+      <span class="badge badge-beta">⚠ Temporarily Disabled</span>
     </div>
     <div class="screenshot-card">
-      <div class="drop-zone" id="drop-zone">
-        <input type="file" id="file-input" accept="image/*" />
-        <div class="drop-icon">📋</div>
-        <div class="drop-text"><strong>Drag &amp; drop</strong> or <strong>paste</strong> a screenshot</div>
-        <div class="drop-hint">Ctrl+V / Cmd+V anywhere · or click to browse · PNG, JPG, WEBP</div>
+      <div class="drop-zone" id="drop-zone" style="cursor:default; opacity:0.45; pointer-events:none;">
+        <input type="file" id="file-input" accept="image/*" disabled />
+        <div class="drop-icon">🚫</div>
+        <div class="drop-text">Screenshot upload is temporarily disabled</div>
+        <div class="drop-hint">Please use the <strong>Primary</strong> text input above — paste your timecard text directly for accurate results.</div>
       </div>
       <div class="ocr-status" id="ocr-status">Initializing OCR engine…</div>
       <div class="progress-bar-wrap" id="progress-wrap">
@@ -597,7 +597,7 @@
       </div>
     </div>
     <p style="font-size:0.68rem; color:var(--muted); font-family:var(--mono); margin-top:0.5rem; line-height:1.6;">
-      ⓘ Screenshot processing runs entirely in your browser. No image data is ever transmitted or stored.
+      ⓘ Screenshot upload is temporarily disabled while accuracy improvements are in progress.
     </p>
   </section>
 
@@ -1090,20 +1090,17 @@
     fileInput.value = '';
   });
 
-  // Paste anywhere (image or text)
+  // Paste anywhere (text only — image paste disabled)
   document.addEventListener('paste', e => {
     const items = e.clipboardData?.items || [];
-
-    // Check for image in clipboard first
+    // Silently ignore image pastes while OCR is disabled
     for (const item of items) {
       if (item.type.startsWith('image/')) {
         e.preventDefault();
-        const file = item.getAsFile();
-        if (file) processImageFile(file);
         return;
       }
     }
-    // Otherwise let the browser paste into the textarea naturally
+    // Let text paste through to textarea naturally
   });
 </script>
 

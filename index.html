@@ -726,9 +726,39 @@
   });
 
   // ── CALCULATE FROM TEXT ──
+  // Detect column-by-column paste (browser copies HTML tables column-first).
+  // Signature: multiple lines containing ONLY a date (e.g. "02MAY") with no
+  // RES/REG row data on the same line — meaning columns were read separately.
+  function isColumnByColumnPaste(text) {
+    const lines = text.split('\n');
+    const dateOnlyLines = lines.filter(l => /^\s*\d{2}[A-Z]{3}\s*$/.test(l.trim())).length;
+    const properRows    = lines.filter(l => /\d{2}[A-Z]{3}\s+(?:RES|REG)\b/i.test(l)).length;
+    // If 2+ bare date lines and very few proper rows → column-by-column
+    return dateOnlyLines >= 2 && properRows < dateOnlyLines;
+  }
+
   btnCalcText.addEventListener('click', async () => {
     const text = textArea.value.trim();
     if (!text) return;
+
+    // Check for column-by-column paste before sending to parser
+    if (isColumnByColumnPaste(text)) {
+      resetResults();
+      resultsSection.classList.add('visible');
+      errorBanner.innerHTML =
+        `<strong>This text was copied in the wrong format.</strong><br><br>` +
+        `When you copy directly from the iCrew timecard page, the browser reads the ` +
+        `table column-by-column (all dates, then all trip numbers, etc.) instead of row-by-row. ` +
+        `This makes the data unreadable.<br><br>` +
+        `<strong>To get correctly formatted text:</strong><br>` +
+        `&nbsp;&nbsp;1. On the iCrew timecard page, click <strong>Print Large</strong> or <strong>Print Medium</strong><br>` +
+        `&nbsp;&nbsp;2. Select all text from the print view (Ctrl+A / Cmd+A)<br>` +
+        `&nbsp;&nbsp;3. Copy and paste that text here instead`;
+      errorBanner.classList.add('visible');
+      btnReportToggle.style.display = 'block';
+      return;
+    }
+
     lastRawText     = text;
     lastInputWasOCR = false;
     await runCalculation(text);

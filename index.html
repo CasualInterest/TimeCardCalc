@@ -549,7 +549,7 @@
   <span class="beta-notice-icon">⚠</span>
   <p class="beta-notice-text">
     <strong>Beta Test Version — This app is in active development.</strong>
-    It may produce incorrect results. When errors occur or are reported, a copy of the input data is automatically logged to help improve accuracy, then permanently deleted. No personal informati[...]
+    It may produce incorrect results. When errors occur or are reported, a copy of the input data is automatically logged to help improve accuracy, then permanently deleted. No personal information is retained beyond the current session. Every test submission helps make the app better.
   </p>
 </div>
 
@@ -606,7 +606,7 @@
     <div class="section-label">Results</div>
 
     <div class="warning-banner" id="warning-banner">
-      ⚠ The parser returned a result that may be incomplete. The raw input has been automatically sent to the developer for review. Please verify this result and use the report button below if [...]
+      ⚠ The parser returned a result that may be incomplete. The raw input has been automatically sent to the developer for review. Please verify this result and use the report button below if something looks wrong.
     </div>
 
     <div class="error-banner" id="error-banner"></div>
@@ -756,12 +756,6 @@
         `&nbsp;&nbsp;3. Copy and paste that text here instead`;
       errorBanner.classList.add('visible');
       btnReportToggle.style.display = 'block';
-
-      // Auto-scroll to Results so the user sees the warning
-      setTimeout(() => {
-        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 50);
-
       return;
     }
 
@@ -833,12 +827,6 @@
         `If you'd like to report this screenshot for review, use the button below.`;
       errorBanner.classList.add('visible');
       btnReportToggle.style.display = 'block';
-
-      // Auto-scroll to Results so the user sees the message
-      setTimeout(() => {
-        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 50);
-
       return;
     }
 
@@ -871,11 +859,8 @@
     }
 
     btnReportToggle.style.display = 'block';
-
-    // Auto-scroll to Results so the user sees the output
-    setTimeout(() => {
-      resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 50);
+    // Scroll results into view smoothly
+    setTimeout(() => resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }
 
   function showError(msg) {
@@ -883,11 +868,7 @@
     errorBanner.textContent = '⚠ ' + msg;
     errorBanner.classList.add('visible');
     btnReportToggle.style.display = 'block';
-
-    // Auto-scroll to Results so the user sees the error
-    setTimeout(() => {
-      resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 50);
+    setTimeout(() => resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }
 
   // ── REPORT ──
@@ -1020,4 +1001,141 @@
     const start = upper.search(/MONTHLY\s+TIME\s+DATA/);
     const end   = upper.search(/END\s+OF\s+DISPLAY/);
     if (start === -1) return raw; // can't find header — return as-is
-[...]
+    const tail = end !== -1 ? end + raw.slice(end).indexOf('\n') + 1 : raw.length;
+    return raw.slice(start, tail).trim();
+  }
+
+  async function processImageFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+
+    ocrStatus.classList.add('visible');
+    ocrStatus.textContent = 'Preparing image…';
+    progressWrap.classList.add('visible');
+    progressBar.style.width = '0%';
+
+    const MIN_CONFIDENCE = 60; // below this → ask for better image
+
+    try {
+      // Store original screenshot for potential error report attachment
+      lastScreenshot = await new Promise((res) => {
+        const reader = new FileReader();
+        reader.onload = () => res({ data: reader.result.split(',')[1], name: file.name || 'screenshot.png', type: file.type || 'image/png' });
+        reader.readAsDataURL(file);
+      });
+
+      // Auto-crop to content area before OCR (removes colored headers/nav bars)
+      ocrStatus.textContent = 'Cropping to timecard area…';
+      const fileToProcess = await autoCropToContent(file);
+      const wasCropped = fileToProcess !== file;
+
+      const worker = await getWorker();
+      const { data } = await worker.recognize(fileToProcess);
+
+      progressBar.style.width = '100%';
+      const confidence = Math.round(data.confidence);
+
+      // ── CONFIDENCE CHECK ─────────────────────────────────────────────
+      if (confidence < MIN_CONFIDENCE) {
+        ocrStatus.textContent = `⚠ Image quality too low (${confidence}% confidence).`;
+        ocrStatus.style.color = 'var(--red)';
+        // Show user-friendly guidance in the results area
+        resetResults();
+        resultsSection.classList.add('visible');
+        errorBanner.innerHTML =
+          `<strong>Image quality too low to read accurately (${confidence}% confidence).</strong><br><br>` +
+          `For best results, please either:<br>` +
+          `&nbsp;&nbsp;• Paste the timecard text directly using the <strong>Primary</strong> input above<br>` +
+          `&nbsp;&nbsp;• Upload a higher resolution screenshot (zoom in on the timecard before screenshotting)`;
+        errorBanner.classList.add('visible');
+        btnReportToggle.style.display = 'block';
+        return;
+      }
+
+      // ── AUTO-TRIM TO TIMECARD BLOCK ───────────────────────────────────
+      let extractedText = trimToTimecard(data.text.trim());
+
+      if (!extractedText) {
+        ocrStatus.textContent = '⚠ Could not extract any text from this image.';
+        return;
+      }
+
+      // ── ROW STRUCTURE CHECK ───────────────────────────────────────────
+      // Verify the OCR produced recognizable RES/REG date rows.
+      // If not, the table was likely read column-by-column (a common OCR
+      // failure on small-text columnar screenshots) and the data is unusable.
+      const hasValidRows = /\b\d{2}[A-Z]{3}\s+(?:RES|REG)\b/i.test(extractedText);
+      if (!hasValidRows) {
+        ocrStatus.textContent = `⚠ Screenshot could not be parsed (${confidence}% confidence).`;
+        ocrStatus.style.color = 'var(--red)';
+        resetResults();
+        resultsSection.classList.add('visible');
+        errorBanner.innerHTML =
+          `<strong>The screenshot reader couldn't parse this timecard's table structure.</strong><br><br>` +
+          `This usually happens when the image is small, low-contrast, or a full-page screenshot — ` +
+          `the OCR reads the table column-by-column instead of row-by-row, scrambling the data.<br><br>` +
+          `<strong>Please copy and paste the timecard text directly</strong> using the ` +
+          `<strong>Primary</strong> input above for an accurate result.`;
+        errorBanner.classList.add('visible');
+        btnReportToggle.style.display = 'block';
+        return;
+      }
+
+      const wasTrimmed = !data.text.trim().toUpperCase().startsWith('MONTHLY');
+      ocrStatus.textContent = (wasCropped || wasTrimmed)
+        ? `✓ Timecard area auto-cropped and extracted (${confidence}% confidence). Running calculation…`
+        : `✓ Text extracted (${confidence}% confidence). Running calculation…`;
+      ocrStatus.style.color = 'var(--amber)';
+
+      // Populate text area so user can see/verify what was extracted
+      textArea.value  = extractedText;
+      lastRawText     = extractedText;
+      lastInputWasOCR = true;
+
+      await runCalculation(extractedText);
+
+    } catch (err) {
+      ocrStatus.textContent = '⚠ OCR failed. Please try pasting the text directly instead.';
+    } finally {
+      setTimeout(() => {
+        progressWrap.classList.remove('visible');
+        progressBar.style.width = '0%';
+        ocrStatus.style.color = ''; // reset color
+      }, 4000);
+    }
+  }
+
+  // Drag & drop
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) processImageFile(file);
+  });
+
+  // File input click
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) processImageFile(fileInput.files[0]);
+    fileInput.value = '';
+  });
+
+  // Paste anywhere (text only — image paste disabled)
+  document.addEventListener('paste', e => {
+    const items = e.clipboardData?.items || [];
+    // Silently ignore image pastes while OCR is disabled
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        return;
+      }
+    }
+    // Let text paste through to textarea naturally
+  });
+</script>
+
+</body>
+</html>

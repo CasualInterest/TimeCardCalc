@@ -859,6 +859,15 @@
     }
 
     btnReportToggle.style.display = 'block';
+
+    scrollToResults();
+  }
+
+  // Smoothly scroll the generated pay summary into view
+  function scrollToResults() {
+    requestAnimationFrame(() => {
+      resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }
 
   function showError(msg) {
@@ -866,6 +875,7 @@
     errorBanner.textContent = '⚠ ' + msg;
     errorBanner.classList.add('visible');
     btnReportToggle.style.display = 'block';
+    scrollToResults();
   }
 
   // ── REPORT ──

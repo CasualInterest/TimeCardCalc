@@ -8,7 +8,10 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "DENY"
+    # Allow only this app and the Seniority Console to frame this page.
+    # (Replaces X-Frame-Options: DENY, which blocked all embedding. XFO has no
+    #  way to allow a specific cross-origin parent in modern browsers; CSP does.)
+    Content-Security-Policy = "frame-ancestors 'self' https://seniority-dashboard.onrender.com"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "no-referrer"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
